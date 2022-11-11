@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+    mp3storage.pgsql:
+        image: postgres:12.4-alpine
+        container_name: mp3storage.pgsql
+        restart: always
+        ports:
+            - "5431:5432"
+        environment:
+            - POSTGRES_PASSWORD=123qwe
+            - POSTGRES_DB=mp3storage
+            - PGDATA=/var/lib/postgresql/data/pgdata
+        volumes:
+            - ./docker/db:/var/lib/postgresql/data/pgdata
+

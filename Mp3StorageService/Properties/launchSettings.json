@@ -1,0 +1,11 @@
+﻿{
+  "profiles": {
+    "Mp3StorageService": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

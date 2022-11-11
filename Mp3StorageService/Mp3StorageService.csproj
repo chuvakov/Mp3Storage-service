@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>dotnet-Mp3StorageService-67E0D0C8-EAD5-4C24-B946-F2D0775850A8</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="log4net" Version="2.0.15" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="6.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Include="install.ps1">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </Content>
+      <Content Include="reinstall.ps1">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </Content>
+      <Content Include="uninstall.ps1">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </Content>
+      <None Remove="Files\install.ps1" />
+      <None Remove="Files\reinstall.ps1" />
+      <None Remove="Files\uninstall.ps1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Mp3Storage.AudioDownloader\Mp3Storage.AudioDownloader.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Update="log4net.config">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+</Project>
