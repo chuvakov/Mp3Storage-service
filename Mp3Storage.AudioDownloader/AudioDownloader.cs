@@ -1,106 +1,126 @@
 ﻿using Mp3Storage.AudioDownloader.Api;
 using Mp3Storage.AudioDownloader.Storage;
-using System.Net.Http.Headers;
 using System.Reflection;
+using Mp3Storage.AudioDownloader.Dto;
 
 namespace Mp3Storage.AudioDownloader
 {
     public class AudioDownloader : IAudioDownloader
     {
+        private readonly string _pathToStorage;
         private readonly ICoMagicApiClient _coMagicApiClient;
         private readonly ISessionKeyStorage _sessionKeyStorage;
+        private static Semaphore SemaphoreMaxRequestDownload { get; set; }
 
-        public AudioDownloader(ICoMagicApiClient coMagicApiClient, ISessionKeyStorage sessionKeyStorage)
+        public AudioDownloader(ICoMagicApiClient coMagicApiClient, ISessionKeyStorage sessionKeyStorage, string login, string password, string pathToStorage)
         {
             _coMagicApiClient = coMagicApiClient;
             _sessionKeyStorage = sessionKeyStorage;
+
+            if (pathToStorage != "Base")
+            {
+                _pathToStorage = pathToStorage;
+            }
+            else
+            {
+                //Получаем путь относительно проекта
+                var appDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                _pathToStorage = Path.Combine(appDir, "mp3storage");
+            }
+
+            _coMagicApiClient.Login = login;
+            _coMagicApiClient.Password = password;
+
+            _coMagicApiClient.SessionKeyChange += _sessionKeyStorage.SetSessionKey;
         }
 
-        public async void Download()
+        public async Task Download(DateTime fromDate, DateTime toDate, int? maxRequestDownloadCount, string groupBy)
         {
-            //Получаем путь относительно проекта
-            var appDir = System.IO.Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-
             string sessionKey = _sessionKeyStorage.GetSessionKey();
 
             if (sessionKey is null)
             {
-                sessionKey = await _coMagicApiClient.GetSessionKey();                
-            }
-            
-
-
-            var request = $"v1/call/?session_key={sessionKey}&date_from=2022-07-11%2012:33:00&date_till=2022-07-11%2012:34:00";
-
-            var response = await client.GetAsync(request);
-
-            // Unauthorized
-
-            var t = response.Content.ReadAsStringAsync();
-
-            var callResponse = await client.GetFromJsonAsync<CallResponse>(request);
-
-            if (callResponse == null)
-            {
-                return;
+                sessionKey = await _coMagicApiClient.GetSessionKey();
+                _sessionKeyStorage.SetSessionKey(sessionKey);
             }
 
-            //проверка авторизации
-            if (callResponse.Message != null && callResponse.Message.Contains("Unauthorized"))
-            {
-                var key = await client.GetFromJsonAsync<SessionKey>("login/?login=systemapi&password=Putin2020!@21Aw");
+            _coMagicApiClient.SessionKey = sessionKey;
 
-                if (key != null)
-                {
-                    Console.WriteLine($"Success: {key.Success}   Data: {key.Data.Session_key}");
-                }
-
-                sessionKey = key.Data.Session_key;
-
-                using (var sw = new StreamWriter(Path.Combine(appDir, "sessionKey.txt")))
-                {
-                    sw.WriteLine(sessionKey);
-                }
-            }
-
-            var calls = callResponse?.Calls?.Where(c => c.Links.Any());
-
+            var calls = await _coMagicApiClient.GetCalls(fromDate, toDate);
             if (calls != null)
             {
-                foreach (var call in calls)
+                //если папка для хранения отсутствует то создаем ее
+                if (!Directory.Exists(_pathToStorage))
+                    Directory.CreateDirectory(_pathToStorage);
+
+                calls = calls.Where(c => c.Links.Any());
+
+                IEnumerable<string> links = calls.SelectMany(c => c.Links);
+
+                var tasks = links.Select(l => DownloadAudio(l));
+
+                switch (groupBy)
                 {
-                    foreach (var link in call.Links)
-                    {
-                        string urlToAudio = "https:" + link;  //дернул ссылку на аудио - для теста
+                    case "Month":
+                        IEnumerable<ShortCallDto> shortCalls = calls.SelectMany(c => c.Links.Select(l => new ShortCallDto { Link = l, FolderName = c.Date.ToString("MM.yyyy") }));
+                        break;
+                    case "Day":
+                        break;
+                    default: "None":
+                        break;
 
-                        using (WebClient webClient = new WebClient())
-                        {
-                            webClient.OpenRead(urlToAudio);
+                }
 
-                            //получаю имя файла
-                            string header_contentDisposition = webClient.ResponseHeaders["content-disposition"];
-                            string filename = new ContentDisposition(header_contentDisposition).FileName;
+                if (maxRequestDownloadCount.HasValue)
+                {
+                    SemaphoreMaxRequestDownload = new Semaphore(maxRequestDownloadCount.Value, maxRequestDownloadCount.Value);
+                }
 
+                await Task.WhenAll(tasks);
 
-
-                            //если папка для хранения отсутствует то создаем ее
-                            if (!Directory.Exists(System.IO.Path.Combine(appDir, "mp3storage")))
-                                Directory.CreateDirectory(System.IO.Path.Combine(appDir, "mp3storage"));
-
-                            //получаем полный путь для будущего файла
-                            var fullPath = System.IO.Path.Combine(appDir, "mp3storage", filename);
-
-                            //скачиваем файл по ссылке и кладем его по полному пути
-                            await webClient.DownloadFileTaskAsync(new Uri(urlToAudio), fullPath);
-                        }
-                    }
+                if (SemaphoreMaxRequestDownload != null)
+                {
+                    SemaphoreMaxRequestDownload = null;
                 }
             }
-
-            //Получение медиафайлов по ссылкам
-
-
         }
-    }
+
+        public async Task DownloadAudio(string link, string folderName = null)
+        {
+            var url = "https:" + link;  //дернул ссылку на аудио - для теста
+
+            using (var httpClient = new HttpClient())
+            {
+                if (SemaphoreMaxRequestDownload != null)
+                {
+                    SemaphoreMaxRequestDownload.WaitOne();
+                }
+
+                var response = await httpClient.GetAsync(url);
+
+                if (SemaphoreMaxRequestDownload != null)
+                {
+                    await Task.Delay(10000);
+                    SemaphoreMaxRequestDownload.Release();
+                }
+
+                //получаю имя файла
+                string filename = response.Content.Headers.ContentDisposition.FileName;
+
+                //получаем полный путь для будущего файла
+                var fullPath = Path.Combine(_pathToStorage, Path.GetFileName(filename));
+
+                if (folderName != null)
+                {
+                    fullPath = Path.Combine(_pathToStorage, folderName , Path.GetFileName(filename));
+                }
+
+                using (var fs = new FileStream(fullPath, FileMode.CreateNew))
+                {
+                    await response.Content.CopyToAsync(fs);
+                }
+            }
+        }
+
     }
 }

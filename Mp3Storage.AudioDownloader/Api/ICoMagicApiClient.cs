@@ -4,10 +4,24 @@ namespace Mp3Storage.AudioDownloader.Api
 {
     public interface ICoMagicApiClient
     {
+        string Login { get; set; }
+        string Password { get; set; }
+
         /// <summary>
         /// Текущий ключ сессии
         /// </summary>
         string SessionKey { get; set; }
+
+        /// <summary>
+        /// Обработка смены ключа сессии
+        /// </summary>
+        /// <param name="sessionKey"></param>
+        delegate void SessionKeyChangeHandler(string sessionKey);
+
+        /// <summary>
+        /// Событие смены ключа сессии
+        /// </summary>
+        event SessionKeyChangeHandler SessionKeyChange;
 
         /// <summary>
         /// Получение нового ключа сессии
