@@ -2,6 +2,7 @@
 using Mp3Storage.AudioDownloader.Storage;
 using System.Reflection;
 using Mp3Storage.AudioDownloader.Dto;
+using Mp3Storage.AudioDownloader.Common;
 
 namespace Mp3Storage.AudioDownloader
 {
@@ -10,12 +11,15 @@ namespace Mp3Storage.AudioDownloader
         private readonly string _pathToStorage;
         private readonly ICoMagicApiClient _coMagicApiClient;
         private readonly ISessionKeyStorage _sessionKeyStorage;
+        private readonly ILinkStorage _linkStorage;
+        public static object _locker = new object();
         private static Semaphore SemaphoreMaxRequestDownload { get; set; }
 
-        public AudioDownloader(ICoMagicApiClient coMagicApiClient, ISessionKeyStorage sessionKeyStorage, string login, string password, string pathToStorage)
+        public AudioDownloader(ICoMagicApiClient coMagicApiClient, ISessionKeyStorage sessionKeyStorage, string login, string password, string pathToStorage, ILinkStorage linkStorage)
         {
             _coMagicApiClient = coMagicApiClient;
             _sessionKeyStorage = sessionKeyStorage;
+            _linkStorage = linkStorage;
 
             if (pathToStorage != "Base")
             {
@@ -36,6 +40,14 @@ namespace Mp3Storage.AudioDownloader
 
         public async Task Download(DateTime fromDate, DateTime toDate, int? maxRequestDownloadCount, string groupBy)
         {
+            for (DateTime dateStart = fromDate; dateStart <= toDate; dateStart = dateStart.AddDays(1))
+            {
+                await DownloadOneDay(dateStart, dateStart.AddDays(1).AddSeconds(-1), maxRequestDownloadCount, groupBy);
+            }
+        }
+
+        private async Task DownloadOneDay(DateTime fromDate, DateTime toDate, int? maxRequestDownloadCount, string groupBy)
+        {
             string sessionKey = _sessionKeyStorage.GetSessionKey();
 
             if (sessionKey is null)
@@ -46,42 +58,98 @@ namespace Mp3Storage.AudioDownloader
 
             _coMagicApiClient.SessionKey = sessionKey;
 
-            var calls = await _coMagicApiClient.GetCalls(fromDate, toDate);
+            IEnumerable<CallDto> calls = null;
+
+            try
+            {
+                calls = await _coMagicApiClient.GetCalls(fromDate, toDate);
+            }
+            catch (Mp3StorageException e)
+            {
+                int retryCount = 5;
+                int divider = 2;
+
+                while (retryCount > 0)
+                {
+                    try
+                    {                  
+                        TimeSpan different = toDate - fromDate;
+
+                        for (DateTime dstart = fromDate; dstart <= toDate; dstart += different / divider)
+                        {
+                            var dend = dstart + different / divider;
+                            calls = await _coMagicApiClient.GetCalls(dstart, dend);
+                            await DownloadCalls(calls, groupBy, maxRequestDownloadCount);
+                        }
+
+                        break;
+                    }
+                    catch (Mp3StorageException ex)
+                    {
+                        retryCount--;
+                        divider++;
+                    }
+                    catch (Exception ex)
+                    {
+                        throw;
+                    }                    
+                }
+
+                return;
+            }
+            catch (Exception e)
+            {
+                throw;
+            }
+            
+
             if (calls != null)
             {
-                //если папка для хранения отсутствует то создаем ее
-                if (!Directory.Exists(_pathToStorage))
-                    Directory.CreateDirectory(_pathToStorage);
+                await DownloadCalls(calls, groupBy, maxRequestDownloadCount);
+            }
+        }
 
-                calls = calls.Where(c => c.Links.Any());
+        public async Task DownloadCalls(IEnumerable<CallDto> calls, string groupBy, int? maxRequestDownloadCount)
+        {
+            //если папка для хранения отсутствует то создаем ее
+            if (!Directory.Exists(_pathToStorage))
+                Directory.CreateDirectory(_pathToStorage);
 
-                IEnumerable<string> links = calls.SelectMany(c => c.Links);
+            calls = calls.Where(c => c.Links.Any());
 
-                var tasks = links.Select(l => DownloadAudio(l));
+            IEnumerable<string> links = calls.SelectMany(c => c.Links);
+            links = _linkStorage.GetLinksNotExist(links.ToArray());
 
-                switch (groupBy)
-                {
-                    case "Month":
-                        IEnumerable<ShortCallDto> shortCalls = calls.SelectMany(c => c.Links.Select(l => new ShortCallDto { Link = l, FolderName = c.Date.ToString("MM.yyyy") }));
-                        break;
-                    case "Day":
-                        break;
-                    default: "None":
-                        break;
+            var tasks = links.Select(l => DownloadAudio(l));
 
-                }
+            IEnumerable<ShortCallDto> shortCalls;
 
-                if (maxRequestDownloadCount.HasValue)
-                {
-                    SemaphoreMaxRequestDownload = new Semaphore(maxRequestDownloadCount.Value, maxRequestDownloadCount.Value);
-                }
+            switch (groupBy)
+            {
+                case "Month":
+                    shortCalls = calls.SelectMany(c => c.Links.Select(l => new ShortCallDto
+                    { Link = l, FolderName = DateTime.Parse(c.Date).ToString("MM.yyyy") }));
+                    shortCalls = shortCalls.Where(c => links.Contains(c.Link));
+                    tasks = shortCalls.Select(c => DownloadAudio(c.Link, c.FolderName));
+                    break;
+                case "Day":
+                    shortCalls = calls.SelectMany(c => c.Links.Select(l => new ShortCallDto
+                    { Link = l, FolderName = DateTime.Parse(c.Date).ToString("dd.MM.yyyy") }));
+                    shortCalls = shortCalls.Where(c => links.Contains(c.Link));
+                    tasks = shortCalls.Select(c => DownloadAudio(c.Link, c.FolderName));
+                    break;
+            }
 
-                await Task.WhenAll(tasks);
+            if (maxRequestDownloadCount.HasValue)
+            {
+                SemaphoreMaxRequestDownload = new Semaphore(maxRequestDownloadCount.Value, maxRequestDownloadCount.Value);
+            }
 
-                if (SemaphoreMaxRequestDownload != null)
-                {
-                    SemaphoreMaxRequestDownload = null;
-                }
+            await Task.WhenAll(tasks);
+
+            if (SemaphoreMaxRequestDownload != null)
+            {
+                SemaphoreMaxRequestDownload = null;
             }
         }
 
@@ -100,7 +168,6 @@ namespace Mp3Storage.AudioDownloader
 
                 if (SemaphoreMaxRequestDownload != null)
                 {
-                    await Task.Delay(10000);
                     SemaphoreMaxRequestDownload.Release();
                 }
 
@@ -112,12 +179,23 @@ namespace Mp3Storage.AudioDownloader
 
                 if (folderName != null)
                 {
-                    fullPath = Path.Combine(_pathToStorage, folderName , Path.GetFileName(filename));
+                    var pathToFolder = Path.Combine(_pathToStorage, folderName);
+
+                    if (!Directory.Exists(pathToFolder))
+                    {
+                        Directory.CreateDirectory(pathToFolder);
+                    }
+                    fullPath = Path.Combine(pathToFolder, Path.GetFileName(filename));
                 }
 
                 using (var fs = new FileStream(fullPath, FileMode.CreateNew))
                 {
                     await response.Content.CopyToAsync(fs);
+                }
+
+                lock (_locker)
+                {
+                    _linkStorage.Add(link);
                 }
             }
         }

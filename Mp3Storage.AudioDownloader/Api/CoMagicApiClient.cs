@@ -1,12 +1,6 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Mp3Storage.AudioDownloader.Common;
 using Mp3Storage.AudioDownloader.Dto;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Mp3Storage.AudioDownloader.Api
 {
@@ -27,32 +21,64 @@ namespace Mp3Storage.AudioDownloader.Api
 
         public async Task<IEnumerable<CallDto>> GetCalls(DateTime from, DateTime to)
         {
-            var dateFrom = from.ToString("yyyy-MM-dd") + "%20" + from.ToString("HH:mm:ss");
-            var dateEnd = to.ToString("yyyy-MM-dd") + "%20" + to.ToString("HH:mm:ss");
-
-            var request = $"v1/call/?session_key={SessionKey}&date_from={dateFrom}&date_till={dateEnd}";
-            var response = await _httpClient.GetFromJsonAsync<CallResponse>(request);
-
-            if (response == null)
+            try
             {
-                throw new Exception($"Не удалось получить данные о звонках за период: c {from} по {to}");
-            }
+                var dateFrom = from.ToString("yyyy-MM-dd") + "%20" + from.ToString("HH:mm:ss");
+                var dateEnd = to.ToString("yyyy-MM-dd") + "%20" + to.ToString("HH:mm:ss");
 
-            if (response.Message != null && response.Message.Contains("Unauthorized"))
-            {
-                SessionKey = await GetSessionKey();
-                SessionKeyChange?.Invoke(SessionKey);
-
-                request = $"v1/call/?session_key={SessionKey}&date_from={dateFrom}&date_till={dateEnd}";
-                response = await _httpClient.GetFromJsonAsync<CallResponse>(request);
+                var request = $"v1/call/?session_key={SessionKey}&date_from={dateFrom}&date_till={dateEnd}";
+                var response = await _httpClient.GetFromJsonAsync<CallResponse>(request);
 
                 if (response == null)
                 {
                     throw new Exception($"Не удалось получить данные о звонках за период: c {from} по {to}");
                 }
+
+                if (response.Message != null && response.Message.Contains("Unauthorized"))
+                {
+                    SessionKey = await GetSessionKey();
+                    SessionKeyChange?.Invoke(SessionKey);
+
+                    request = $"v1/call/?session_key={SessionKey}&date_from={dateFrom}&date_till={dateEnd}";
+                    response = await _httpClient.GetFromJsonAsync<CallResponse>(request);
+
+                    if (response == null)
+                    {
+                        throw new Exception($"Не удалось получить данные о звонках за период: c {from} по {to}");
+                    }
+                }
+
+                return response.Calls;
+            }
+            catch (Exception e)
+            {
+                if (e.Message.Contains("504"))
+                {
+                    var isConnect = await CheckConnect();
+
+                    if (isConnect)
+                    {
+                        throw new Mp3StorageException("Слишком много аудио за данный период", ExceptionCode.ResponseOverflowCalls);
+                    }
+                }
+                throw;
+            }
+        }
+
+        private async Task<bool> CheckConnect()
+        {
+            try
+            {
+                var dateStart = new DateTime(2022, 11, 07, 12, 00, 00);
+                var dateEnd = new DateTime(2022, 11, 07, 13, 00, 00);
+                var calls = await GetCalls(dateStart, dateEnd);
+                return calls.Any();
+            }
+            catch (Exception)
+            {
+                return false;
             }
 
-            return response.Calls;
         }
 
         public async Task<string> GetSessionKey()

@@ -9,7 +9,7 @@ namespace Mp3Storage.AudioDownloader.Dto
     public class ShortCallDto
     {
         public string Link { get; set; }
-        
         public string FolderName { get; set; }
+        public DateTime Date { get; set; }
     }
 }

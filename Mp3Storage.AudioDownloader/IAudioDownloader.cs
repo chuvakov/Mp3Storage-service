@@ -13,6 +13,6 @@
         /// </summary>
         /// <param name="url"></param>
         /// <returns></returns>
-        Task DownloadAudio(string link);
+        Task DownloadAudio(string link, string folderName = null);
     }
 }

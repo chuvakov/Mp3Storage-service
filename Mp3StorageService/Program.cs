@@ -23,11 +23,12 @@ IHost host = Host.CreateDefaultBuilder(args)
         });
 
         services.AddTransient<ISessionKeyStorage, SessionKeyFileStorage>();
+        services.AddTransient<ILinkStorage, LinkFileStorage>();
         services.AddTransient<IAudioDownloader>(serviceProvider =>
             new AudioDownloader(serviceProvider.GetRequiredService<ICoMagicApiClient>(),
             serviceProvider.GetRequiredService<ISessionKeyStorage>(),
             configuration["App:CoMagicApi:Login"], configuration["App:CoMagicApi:Password"],
-            configuration["App:PathToStorage"]));      
+            configuration["App:PathToStorage"], serviceProvider.GetRequiredService<ILinkStorage>()));      
     })
     .Build();
 

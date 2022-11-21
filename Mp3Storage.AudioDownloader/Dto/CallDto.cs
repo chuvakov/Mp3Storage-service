@@ -10,6 +10,6 @@ namespace Mp3Storage.AudioDownloader.Dto
         public string[] Links { get; set; }
 
         [JsonPropertyName("call_date")]
-        public DateTime Date { get; set; }
+        public string Date { get; set; }
     }
 }
