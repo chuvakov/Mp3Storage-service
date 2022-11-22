@@ -8,6 +8,8 @@ namespace Mp3Storage.AudioDownloader
 {
     public class AudioDownloader : IAudioDownloader
     {
+        private readonly ILoggerManager _loggerManager;
+
         private readonly string _pathToStorage;
         private readonly ICoMagicApiClient _coMagicApiClient;
         private readonly ISessionKeyStorage _sessionKeyStorage;
@@ -15,7 +17,7 @@ namespace Mp3Storage.AudioDownloader
         public static object _locker = new object();
         private static Semaphore SemaphoreMaxRequestDownload { get; set; }
 
-        public AudioDownloader(ICoMagicApiClient coMagicApiClient, ISessionKeyStorage sessionKeyStorage, string login, string password, string pathToStorage, ILinkStorage linkStorage)
+        public AudioDownloader(ICoMagicApiClient coMagicApiClient, ISessionKeyStorage sessionKeyStorage, string login, string password, string pathToStorage, ILinkStorage linkStorage, ILoggerManager loggerManager)
         {
             _coMagicApiClient = coMagicApiClient;
             _sessionKeyStorage = sessionKeyStorage;
@@ -36,18 +38,24 @@ namespace Mp3Storage.AudioDownloader
             _coMagicApiClient.Password = password;
 
             _coMagicApiClient.SessionKeyChange += _sessionKeyStorage.SetSessionKey;
+            _loggerManager=loggerManager;
         }
 
         public async Task Download(DateTime fromDate, DateTime toDate, int? maxRequestDownloadCount, string groupBy)
         {
-            for (DateTime dateStart = fromDate; dateStart <= toDate; dateStart = dateStart.AddDays(1))
+            _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание({nameof(Download)}) с {fromDate} по {toDate} maxRequestDownloadCount: {maxRequestDownloadCount} groupBy:{groupBy}");
+
+            for (DateTime dateStart = fromDate; dateStart <= toDate; dateStart = dateStart.AddHours(2)) //AddDays(1))
             {
-                await DownloadOneDay(dateStart, dateStart.AddDays(1).AddSeconds(-1), maxRequestDownloadCount, groupBy);
+                //await DownloadOneDay(dateStart, dateStart.AddDays(1).AddSeconds(-1), maxRequestDownloadCount, groupBy);
+                await DownloadOneDay(dateStart, dateStart.AddHours(2).AddSeconds(-1), maxRequestDownloadCount, groupBy);
             }
         }
 
         private async Task DownloadOneDay(DateTime fromDate, DateTime toDate, int? maxRequestDownloadCount, string groupBy)
         {
+            _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание({nameof(DownloadOneDay)}) с {fromDate} по {toDate}");
+
             string sessionKey = _sessionKeyStorage.GetSessionKey();
 
             if (sessionKey is null)
@@ -69,10 +77,15 @@ namespace Mp3Storage.AudioDownloader
                 int retryCount = 5;
                 int divider = 2;
 
+                _loggerManager.Error(e.Message, e);
+                _loggerManager.Info($"{DateTimeOffset.Now}: Пробуем скачать с дроблениме, попыток({retryCount})");
+
                 while (retryCount > 0)
                 {
                     try
-                    {                  
+                    {
+                        _loggerManager.Info($"{DateTimeOffset.Now}: Пробуем скачать с дроблениме, попытка номер({retryCount}), делитель({divider})");
+
                         TimeSpan different = toDate - fromDate;
 
                         for (DateTime dstart = fromDate; dstart <= toDate; dstart += different / divider)
@@ -120,6 +133,8 @@ namespace Mp3Storage.AudioDownloader
             IEnumerable<string> links = calls.SelectMany(c => c.Links);
             links = _linkStorage.GetLinksNotExist(links.ToArray());
 
+            _loggerManager.Info($"{DateTimeOffset.Now}: Колличество ссылок в звонках({links.Count()})");
+
             var tasks = links.Select(l => DownloadAudio(l));
 
             IEnumerable<ShortCallDto> shortCalls;
@@ -155,6 +170,8 @@ namespace Mp3Storage.AudioDownloader
 
         public async Task DownloadAudio(string link, string folderName = null)
         {
+            _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание аудио по ссылке({link})");
+
             var url = "https:" + link;  //дернул ссылку на аудио - для теста
 
             using (var httpClient = new HttpClient())

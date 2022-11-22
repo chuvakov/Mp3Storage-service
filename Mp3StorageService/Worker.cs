@@ -6,23 +6,23 @@ namespace Mp3StorageService;
 
 public class Worker : BackgroundService
 {
-    //private readonly ILoggerManager _loggerManager;
+    private readonly ILoggerManager _loggerManager;
 
     private readonly IAudioDownloader _audioDownloader;
     private readonly IConfiguration _configuration;
     private bool IsAutoDailyMode = false;
     private Timer _timer;
 
-    public Worker(IAudioDownloader audioDownloader, IConfiguration configuration) //, ILoggerManager loggerManager)
+    public Worker(IAudioDownloader audioDownloader, IConfiguration configuration, ILoggerManager loggerManager)
     {
         _audioDownloader = audioDownloader;
         _configuration = configuration;
-        //_loggerManager = loggerManager;
+        _loggerManager = loggerManager;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        //_loggerManager.Info($"Служба запущена {DateTimeOffset.Now}");
+        _loggerManager.Info($"Служба запущена {DateTimeOffset.Now}");
         var thread = new Thread(Start);
         thread.Start();
 
@@ -34,7 +34,7 @@ public class Worker : BackgroundService
 
     public void Start()
     {
-        //_loggerManager.Info($"Создан таймер для периодического скачивания {DateTimeOffset.Now}");
+        _loggerManager.Info($"Создан таймер для периодического скачивания {DateTimeOffset.Now}");
         _timer = new Timer(t => DownloadMp3Files(), state: null, dueTime: 0, period: 3600 * 24 * 1000); //3600 * 24 * 1000
     }
 
@@ -79,9 +79,9 @@ public class Worker : BackgroundService
         }
         catch (Exception e)
         {
-            //_loggerManager.Error($"Произошла ошибка при скачивании ({nameof(DownloadMp3Files)}) - {DateTimeOffset.Now}", e);
+            _loggerManager.Error($"Произошла ошибка при скачивании ({nameof(DownloadMp3Files)}) - {DateTimeOffset.Now}", e);
 
-            await Task.Delay(3600 * 1000);
+            await Task.Delay(3000); // 3600 * 1000 - один час, через который повторяем попытку
             DownloadMp3Files(dateFrom, dateTo);
         }
     }

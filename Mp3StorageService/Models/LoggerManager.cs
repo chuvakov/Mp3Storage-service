@@ -4,17 +4,18 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using log4net;
+using Mp3Storage.AudioDownloader;
 
 namespace Mp3StorageService.Models
 {
-    public class LoggerManager
+    public class LoggerManager : ILoggerManager
     {
         private readonly ILog _log;
-        private readonly ILogger _logger;
+        private readonly ILogger<LogManager> _logger;
 
-        public LoggerManager(ILog log, ILogger logger)
+        public LoggerManager(ILogger<LogManager> logger)
         {
-            _log = log;
+            _log = LogManager.GetLogger(typeof(LogManager));
             _logger = logger;
         }
 
