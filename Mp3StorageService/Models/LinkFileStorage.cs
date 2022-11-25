@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using Mp3Storage.AudioDownloader.Storage;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using Mp3Storage.AudioDownloader.Storage;
 
 namespace Mp3StorageService.Models
 {
@@ -38,7 +33,7 @@ namespace Mp3StorageService.Models
                 Console.WriteLine(e);
                 throw;
             }
-            
+
         }
 
         public string[] GetLinksNotExist(string[] links)
@@ -63,7 +58,7 @@ namespace Mp3StorageService.Models
                 Console.WriteLine(e);
                 throw;
             }
-            
+
         }
     }
 }

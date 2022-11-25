@@ -1,4 +1,6 @@
-﻿namespace Mp3Storage.AudioDownloader
+﻿using Mp3Storage.AudioDownloader.Jobs;
+
+namespace Mp3Storage.AudioDownloader
 {
     public interface IAudioDownloader
     {
@@ -6,7 +8,7 @@
         /// Скачивание всех аудио
         /// </summary>
         /// <returns></returns>
-        Task Download(DateTime dateFrom, DateTime dateTo, int? maxRequestDownloadCount, string groupBy);
+        Task Download(JobDownload job, int? maxRequestDownloadCount, string groupBy);
 
         /// <summary>
         /// Скачивание одного аудио по URL

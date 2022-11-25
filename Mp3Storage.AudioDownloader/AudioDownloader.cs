@@ -3,6 +3,7 @@ using Mp3Storage.AudioDownloader.Storage;
 using System.Reflection;
 using Mp3Storage.AudioDownloader.Dto;
 using Mp3Storage.AudioDownloader.Common;
+using Mp3Storage.AudioDownloader.Jobs;
 
 namespace Mp3Storage.AudioDownloader
 {
@@ -41,11 +42,11 @@ namespace Mp3Storage.AudioDownloader
             _loggerManager=loggerManager;
         }
 
-        public async Task Download(DateTime fromDate, DateTime toDate, int? maxRequestDownloadCount, string groupBy)
+        public async Task Download(JobDownload job, int? maxRequestDownloadCount, string groupBy)
         {
-            _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание({nameof(Download)}) с {fromDate} по {toDate} maxRequestDownloadCount: {maxRequestDownloadCount} groupBy:{groupBy}");
+            _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание({nameof(Download)}) с {job.DateFrom} по {job.DateTo} maxRequestDownloadCount: {maxRequestDownloadCount} groupBy:{groupBy}");
 
-            for (DateTime dateStart = fromDate; dateStart <= toDate; dateStart = dateStart.AddHours(2)) //AddDays(1))
+            for (DateTime dateStart = job.DateFrom; dateStart <= job.DateTo; dateStart = dateStart.AddHours(2)) //AddDays(1))
             {
                 //await DownloadOneDay(dateStart, dateStart.AddDays(1).AddSeconds(-1), maxRequestDownloadCount, groupBy);
                 await DownloadOneDay(dateStart, dateStart.AddHours(2).AddSeconds(-1), maxRequestDownloadCount, groupBy);
