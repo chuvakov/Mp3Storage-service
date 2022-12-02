@@ -25,20 +25,6 @@ public class Worker : BackgroundService
         _loggerManager = loggerManager;
         _jobStorage = jobStorage;
         _applicationLifetime = applicationLifetime;
-
-        _applicationLifetime.ApplicationStopped.Register(Stop);
-        _applicationLifetime.ApplicationStopping.Register(Stop);
-        AppDomain.CurrentDomain.ProcessExit += Exit;
-    }
-
-    private void Exit(object? sender, EventArgs e)
-    {
-        _loggerManager.Info("Exit");
-    }
-
-    private void Stop()
-    {
-        _loggerManager.Info("Stop");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -46,8 +32,6 @@ public class Worker : BackgroundService
         _loggerManager.Info($"Служба запущена {DateTimeOffset.Now}");
         var thread = new Thread(Start);
         thread.Start();
-
-        SystemEvents.SessionEnding += SystemEvents_SessionEnding;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -59,7 +43,7 @@ public class Worker : BackgroundService
     {
         _loggerManager.Info($"Создан таймер для периодического скачивания {DateTimeOffset.Now}");
         _timer = new Timer(t => DownloadMp3Files(), state: null, dueTime: 0, period: 3600 * 24 * 1000); //3600 * 24 * 1000
-        _timerExecuter = new Timer(t => _jobStorage.Execute(), state: null, dueTime: 0, period: 1 * 5 * 1000); // 4 * 60 * 1000) - 4 минуты
+        _timerExecuter = new Timer(t => _jobStorage.ExecuteFirstJob(), state: null, dueTime: 0, period: 1 * 5 * 1000); // 4 * 60 * 1000) - 4 минуты
     }
 
     private async void DownloadMp3Files(DateTime? dateFrom = null, DateTime? dateTo = null)
@@ -113,19 +97,6 @@ public class Worker : BackgroundService
 
             await Task.Delay(3000); // 3600 * 1000 - один час, через который повторяем попытку
             DownloadMp3Files(dateFrom, dateTo);
-        }
-    }
-    void SystemEvents_SessionEnding(object sender, SessionEndingEventArgs e)
-    {
-        switch (e.Reason)
-        {
-            case SessionEndReasons.Logoff:
-                _loggerManager.Info("User logging off");
-                break;
-
-            case SessionEndReasons.SystemShutdown:
-                _loggerManager.Info("System is shutting down");
-                break;
         }
     }
 }

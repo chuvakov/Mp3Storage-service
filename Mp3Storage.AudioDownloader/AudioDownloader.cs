@@ -45,10 +45,6 @@ namespace Mp3Storage.AudioDownloader
         public async Task Download(JobDownload job)
         {
             _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание({nameof(Download)}) с {job.DateFrom} по {job.DateTo} maxRequestDownloadCount: {job.MaxRequestDownloadCount} groupBy:{job.GroupBy}");
-
-            
-
-            //await DownloadOneDay(dateStart, dateStart.AddDays(1).AddSeconds(-1), maxRequestDownloadCount, groupBy);
             await DownloadOneDay(job.DateFrom, job.DateTo, job.MaxRequestDownloadCount, job.GroupBy);
         }
 
