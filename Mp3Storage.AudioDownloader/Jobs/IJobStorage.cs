@@ -9,6 +9,8 @@ namespace Mp3Storage.AudioDownloader.Jobs
     public interface IJobStorage
     {
         void AddJob(JobDownload jobDownload);
-        void Execute();
+        Task Execute();
+
+        void ChangeState(JobDownload jobDownload, JobState state);
     }
 }

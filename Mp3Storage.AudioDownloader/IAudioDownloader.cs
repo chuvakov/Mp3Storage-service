@@ -8,7 +8,7 @@ namespace Mp3Storage.AudioDownloader
         /// Скачивание всех аудио
         /// </summary>
         /// <returns></returns>
-        Task Download(JobDownload job, int? maxRequestDownloadCount, string groupBy);
+        Task Download(JobDownload job);
 
         /// <summary>
         /// Скачивание одного аудио по URL

@@ -12,7 +12,16 @@ namespace Mp3Storage.AudioDownloader.Jobs
         public DateTime Date { get; set; }
         public DateTime DateFrom { get; set; }
         public DateTime DateTo { get; set; }        
-        public IEnumerable<JobDownload> ChildJobs { get; set; } 
-        public bool IsExecute { get; set; } 
+        public IList<JobDownload> ChildJobs { get; set; } 
+        public JobState State { get; set; }
+        public int? MaxRequestDownloadCount { get; set; }
+        public string GroupBy { get; set; }
+
+        public JobDownload()
+        {
+            Id = Guid.NewGuid();
+            Date = DateTime.Now;
+            ChildJobs = new List<JobDownload>();
+        }
     }
 }
