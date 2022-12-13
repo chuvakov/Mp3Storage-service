@@ -1,9 +1,9 @@
 ﻿using Mp3Storage.AudioDownloader.Api;
-using Mp3Storage.AudioDownloader.Storage;
-using System.Reflection;
-using Mp3Storage.AudioDownloader.Dto;
 using Mp3Storage.AudioDownloader.Common;
+using Mp3Storage.AudioDownloader.Dto;
 using Mp3Storage.AudioDownloader.Jobs;
+using Mp3Storage.AudioDownloader.Storage;
+using Mp3Storage.AudioDownloader.Utils;
 
 namespace Mp3Storage.AudioDownloader
 {
@@ -11,35 +11,34 @@ namespace Mp3Storage.AudioDownloader
     {
         private readonly ILoggerManager _loggerManager;
 
-        private readonly string _pathToStorage;
+        private string _pathToStorage;
         private readonly ICoMagicApiClient _coMagicApiClient;
         private readonly ISessionKeyStorage _sessionKeyStorage;
         private readonly ILinkStorage _linkStorage;
         public static object _locker = new object();
+
         private static Semaphore SemaphoreMaxRequestDownload { get; set; }
 
-        public AudioDownloader(ICoMagicApiClient coMagicApiClient, ISessionKeyStorage sessionKeyStorage, string login, string password, string pathToStorage, ILinkStorage linkStorage, ILoggerManager loggerManager)
+        public AudioDownloader(
+            ICoMagicApiClient coMagicApiClient,
+            ISessionKeyStorage sessionKeyStorage,
+            ILinkStorage linkStorage,
+            ILoggerManager loggerManager
+            )
         {
             _coMagicApiClient = coMagicApiClient;
             _sessionKeyStorage = sessionKeyStorage;
             _linkStorage = linkStorage;
-
-            if (pathToStorage != "Base")
-            {
-                _pathToStorage = pathToStorage;
-            }
-            else
-            {
-                //Получаем путь относительно проекта
-                var appDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                _pathToStorage = Path.Combine(appDir, "mp3storage");
-            }
-
-            _coMagicApiClient.Login = login;
-            _coMagicApiClient.Password = password;
+            _loggerManager=loggerManager;
 
             _coMagicApiClient.SessionKeyChange += _sessionKeyStorage.SetSessionKey;
-            _loggerManager=loggerManager;
+        }
+
+        private void InitSettings(string login, string password, string pathToStorage)
+        {
+            _coMagicApiClient.Login = login;
+            _coMagicApiClient.Password = password;
+            _pathToStorage = pathToStorage != "Base" ? pathToStorage : FileUtility.GetPathTo("mp3storage");
         }
 
         public async Task Download(JobDownload job)
@@ -101,7 +100,7 @@ namespace Mp3Storage.AudioDownloader
                     catch (Exception ex)
                     {
                         throw;
-                    }                    
+                    }
                 }
 
                 return;
@@ -110,7 +109,7 @@ namespace Mp3Storage.AudioDownloader
             {
                 throw;
             }
-            
+
 
             if (calls != null)
             {

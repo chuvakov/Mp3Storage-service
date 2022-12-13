@@ -27,11 +27,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         services.AddTransient<ILinkStorage, LinkFileStorage>();
         services.AddTransient<ILoggerManager, LoggerManager>();
         services.AddTransient<IJobStorage, JobFileStorage>();
-        services.AddTransient<IAudioDownloader>(serviceProvider =>
-            new AudioDownloader(serviceProvider.GetRequiredService<ICoMagicApiClient>(),
-            serviceProvider.GetRequiredService<ISessionKeyStorage>(),
-            configuration["App:CoMagicApi:Login"], configuration["App:CoMagicApi:Password"],
-            configuration["App:PathToStorage"], serviceProvider.GetRequiredService<ILinkStorage>(), serviceProvider.GetRequiredService<ILoggerManager>()));      
+        services.AddTransient<IAudioDownloader, AudioDownloader>();
     })
     .UseConsoleLifetime()
     .Build();

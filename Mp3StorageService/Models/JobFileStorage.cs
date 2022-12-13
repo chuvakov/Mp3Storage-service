@@ -1,7 +1,7 @@
 ﻿using Mp3Storage.AudioDownloader;
+using Mp3Storage.AudioDownloader.Extentions;
 using Mp3Storage.AudioDownloader.Jobs;
-using Newtonsoft.Json;
-using System.Reflection;
+using Mp3Storage.AudioDownloader.Utils;
 
 namespace Mp3StorageService.Models
 {
@@ -9,28 +9,34 @@ namespace Mp3StorageService.Models
     {
         private readonly string _pathToFile;
         private readonly ILoggerManager _logger;
+        private readonly IAudioDownloader _audioDownloader;
         private List<JobDownload> Jobs { get; set; } = new List<JobDownload>();
         private static object _lock = new object();
-        private readonly IAudioDownloader _audioDownloader;
         public static bool IsAlreadyExecuteJob;
 
-        public JobFileStorage(IAudioDownloader audioDownloader, ILoggerManager logger)
+        public JobFileStorage(IAudioDownloader audioDownloader, ILoggerManager logger, IConfiguration configuration)
         {
             _audioDownloader = audioDownloader;
             _logger = logger;
+            _pathToFile = FileUtility.GetPathTo("jobStorage.json");
 
-            var appDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            _pathToFile = Path.Combine(appDir, "jobStorage.txt");
+            InitAudioDownloader(configuration);
 
-            if (!File.Exists(_pathToFile))
-            {
-                using var file = File.CreateText(_pathToFile);
-                file.WriteLine(JsonConvert.SerializeObject(Jobs));
-            }
-            else
-            {
-                InitJobs();
-            }
+            FileUtility.CreateFileIfNotExist(_pathToFile, Jobs.ToJson());
+            InitJobs();
+        }
+
+        /// <summary>
+        /// Настройка AudioDownloader
+        /// </summary>
+        /// <param name="configuration"></param>
+        private void InitAudioDownloader(IConfiguration configuration)
+        {
+            string login = configuration["App:CoMagicApi:Login"];
+            string password = configuration["App:CoMagicApi:Password"];
+            string pathToStorage = configuration["App:PathToStorage"];
+
+            _audioDownloader.InitSettings(login, password, pathToStorage);
         }
 
         /// <summary>
@@ -39,7 +45,7 @@ namespace Mp3StorageService.Models
         private void InitJobs()
         {
             var text = File.ReadAllText(_pathToFile);
-            Jobs = JsonConvert.DeserializeObject<List<JobDownload>>(text);
+            Jobs = text.FromJson<List<JobDownload>>();
         }
 
         /// <summary>
@@ -63,7 +69,7 @@ namespace Mp3StorageService.Models
         /// </summary>
         private void UpdateJobsInFile()
         {
-            File.WriteAllText(_pathToFile, JsonConvert.SerializeObject(Jobs));
+            File.WriteAllText(_pathToFile, Jobs.ToJson());
         }
 
         /// <summary>
@@ -107,7 +113,7 @@ namespace Mp3StorageService.Models
             try
             {
                 _logger.Info($"Зашли в метод ExecuteFirstJob()");
-                if (!IsCanExecuteJob()) 
+                if (!IsCanExecuteJob())
                     return;
 
                 IsAlreadyExecuteJob = true;
@@ -115,17 +121,13 @@ namespace Mp3StorageService.Models
                 var job = Jobs.First(j => j.State != JobState.Success);
                 await ExecuteJob(job);
 
-                if (job.ChildJobs.All(cj => cj.State == JobState.Success))
-                {
-                    ChangeState(job, JobState.Success);
-                }
-
                 IsAlreadyExecuteJob = false;
             }
             catch (Exception e)
             {
                 IsAlreadyExecuteJob = false;
                 _logger.Error($"Ошибка при выполнении работы", e);
+                ChangeState(job, JobState.Error);
             }
         }
 
@@ -144,6 +146,16 @@ namespace Mp3StorageService.Models
             foreach (var childJob in childJobs)
             {
                 await ExecuteChildJob(childJob);
+            }
+
+            if (job.ChildJobs.All(cj => cj.State == JobState.Success))
+            {
+                ChangeState(job, JobState.Success);
+            }
+
+            if (job.ChildJobs.Any(cj => cj.State == JobState.Error))
+            {
+                ChangeState(job, JobState.Error);
             }
         }
 
