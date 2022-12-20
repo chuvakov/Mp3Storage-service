@@ -4,6 +4,7 @@ using Mp3Storage.AudioDownloader.Dto;
 using Mp3Storage.AudioDownloader.Jobs;
 using Mp3Storage.AudioDownloader.Storage;
 using Mp3Storage.AudioDownloader.Utils;
+using Polly;
 
 namespace Mp3Storage.AudioDownloader
 {
@@ -13,7 +14,6 @@ namespace Mp3Storage.AudioDownloader
 
         private string _pathToStorage;
         private readonly ICoMagicApiClient _coMagicApiClient;
-        private readonly ISessionKeyStorage _sessionKeyStorage;
         private readonly ILinkStorage _linkStorage;
         public static object _locker = new object();
 
@@ -21,99 +21,87 @@ namespace Mp3Storage.AudioDownloader
 
         public AudioDownloader(
             ICoMagicApiClient coMagicApiClient,
-            ISessionKeyStorage sessionKeyStorage,
             ILinkStorage linkStorage,
             ILoggerManager loggerManager
             )
         {
             _coMagicApiClient = coMagicApiClient;
-            _sessionKeyStorage = sessionKeyStorage;
             _linkStorage = linkStorage;
             _loggerManager=loggerManager;
-
-            _coMagicApiClient.SessionKeyChange += _sessionKeyStorage.SetSessionKey;
         }
 
-        private void InitSettings(string login, string password, string pathToStorage)
+        /// <summary>
+        /// Инициализация настроек для скачивания
+        /// </summary>
+        /// <param name="login"></param>
+        /// <param name="password"></param>
+        /// <param name="pathToStorage"></param>
+        public void InitSettings(string login, string password, string pathToStorage)
         {
             _coMagicApiClient.Login = login;
             _coMagicApiClient.Password = password;
             _pathToStorage = pathToStorage != "Base" ? pathToStorage : FileUtility.GetPathTo("mp3storage");
         }
 
-        public async Task Download(JobDownload job)
+        /// <summary>
+        /// Выполняем работу (скачивание)
+        /// </summary>
+        /// <param name="job"></param>
+        /// <returns></returns>
+        public async Task Execute(JobDownload job)
         {
-            _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание({nameof(Download)}) с {job.DateFrom} по {job.DateTo} maxRequestDownloadCount: {job.MaxRequestDownloadCount} groupBy:{job.GroupBy}");
-            await DownloadOneDay(job.DateFrom, job.DateTo, job.MaxRequestDownloadCount, job.GroupBy);
-        }
-
-        private async Task DownloadOneDay(DateTime fromDate, DateTime toDate, int? maxRequestDownloadCount, string groupBy)
-        {
-            _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание({nameof(DownloadOneDay)}) с {fromDate} по {toDate}");
-
-            string sessionKey = _sessionKeyStorage.GetSessionKey();
-
-            if (sessionKey is null)
-            {
-                sessionKey = await _coMagicApiClient.GetSessionKey();
-                _sessionKeyStorage.SetSessionKey(sessionKey);
-            }
-
-            _coMagicApiClient.SessionKey = sessionKey;
+            _loggerManager.Info($"{DateTimeOffset.Now}: Скачивание({nameof(Execute)}) с {job.DateFrom} по {job.DateTo} maxRequestDownloadCount: {job.MaxRequestDownloadCount} groupBy:{job.GroupBy}");
 
             IEnumerable<CallDto> calls = null;
+            var divider = 2;
+            var retryCount = 4;
+
+            //Задаем политику повторения выполнения метода
+            var policy = Policy
+                .Handle<Mp3StorageException>()
+                .RetryAsync(retryCount, (e, retryCount) =>
+                {
+                    _loggerManager.Info(
+                        $"{DateTimeOffset.Now}: Пробуем скачать с дроблениме, попытка номер({retryCount}), делитель({divider})");
+                    divider++;
+                });
 
             try
             {
-                calls = await _coMagicApiClient.GetCalls(fromDate, toDate);
+                calls = await _coMagicApiClient.GetCalls(job.DateFrom, job.DateTo);
             }
             catch (Mp3StorageException e)
             {
-                int retryCount = 5;
-                int divider = 2;
-
                 _loggerManager.Error(e.Message, e);
                 _loggerManager.Info($"{DateTimeOffset.Now}: Пробуем скачать с дроблениме, попыток({retryCount})");
 
-                while (retryCount > 0)
-                {
-                    try
-                    {
-                        _loggerManager.Info($"{DateTimeOffset.Now}: Пробуем скачать с дроблениме, попытка номер({retryCount}), делитель({divider})");
-
-                        TimeSpan different = toDate - fromDate;
-
-                        for (DateTime dstart = fromDate; dstart <= toDate; dstart += different / divider)
-                        {
-                            var dend = dstart + different / divider;
-                            calls = await _coMagicApiClient.GetCalls(dstart, dend);
-                            await DownloadCalls(calls, groupBy, maxRequestDownloadCount);
-                        }
-
-                        break;
-                    }
-                    catch (Mp3StorageException ex)
-                    {
-                        retryCount--;
-                        divider++;
-                    }
-                    catch (Exception ex)
-                    {
-                        throw;
-                    }
-                }
-
-                return;
+                await policy.ExecuteAsync(() => DownloadWithDivider(divider, job));
             }
-            catch (Exception e)
-            {
-                throw;
-            }
-
 
             if (calls != null)
             {
-                await DownloadCalls(calls, groupBy, maxRequestDownloadCount);
+                await DownloadCalls(calls, job.GroupBy, job.MaxRequestDownloadCount);
+            }
+        }
+
+        /// <summary>
+        /// Скачивание с дроблением
+        /// </summary>
+        /// <param name="divider"></param>
+        /// <param name="fromDate"></param>
+        /// <param name="toDate"></param>
+        /// <param name="groupBy"></param>
+        /// <param name="maxRequestDownloadCount"></param>
+        /// <returns></returns>
+        private async Task DownloadWithDivider(int divider, JobDownload job)
+        {
+            var different = job.DateTo - job.DateFrom;
+
+            for (var dateFrom = job.DateFrom; dateFrom <= job.DateTo; dateFrom += different / divider)
+            {
+                var dateTo = dateFrom + different / divider;
+                var calls = await _coMagicApiClient.GetCalls(dateFrom, dateTo);
+                await DownloadCalls(calls, job.GroupBy, job.MaxRequestDownloadCount);
             }
         }
 

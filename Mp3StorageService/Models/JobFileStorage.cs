@@ -169,7 +169,7 @@ namespace Mp3StorageService.Models
             try
             {
                 _logger.Info($"Работа childJob начала выполняться - {childJob.DateFrom} {childJob.DateTo}");
-                await _audioDownloader.Download(childJob);
+                await _audioDownloader.Execute(childJob);
                 ChangeState(childJob, JobState.Success);
             }
             catch (Exception)

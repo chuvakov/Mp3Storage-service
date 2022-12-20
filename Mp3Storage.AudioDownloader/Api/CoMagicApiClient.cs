@@ -1,5 +1,6 @@
 ﻿using Mp3Storage.AudioDownloader.Common;
 using Mp3Storage.AudioDownloader.Dto;
+using Mp3Storage.AudioDownloader.Storage;
 using System.Net.Http.Json;
 
 namespace Mp3Storage.AudioDownloader.Api
@@ -14,9 +15,24 @@ namespace Mp3Storage.AudioDownloader.Api
         public string SessionKey { get; set; }
         public event ICoMagicApiClient.SessionKeyChangeHandler SessionKeyChange;
 
-        public CoMagicApiClient(HttpClient httpClient)
+        public CoMagicApiClient(HttpClient httpClient, ISessionKeyStorage sessionKeyStorage)
         {
             _httpClient=httpClient;
+            SessionKeyChange += sessionKeyStorage.SetSessionKey;
+            InitSessionKey(sessionKeyStorage);
+        }
+
+        private void InitSessionKey(ISessionKeyStorage sessionKeyStorage)
+        {
+            string sessionKey = sessionKeyStorage.GetSessionKey();
+
+            if (sessionKey is null)
+            {
+                sessionKey = GetSessionKey().Result;
+                sessionKeyStorage.SetSessionKey(sessionKey);
+            }
+
+            SessionKey = sessionKey;
         }
 
         public async Task<IEnumerable<CallDto>> GetCalls(DateTime from, DateTime to)
