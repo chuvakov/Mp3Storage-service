@@ -1,5 +1,7 @@
-﻿using Mp3Storage.AudioDownloader.Storage;
+﻿using Mp3Storage.AudioDownloader.Dto;
+using Mp3Storage.AudioDownloader.Storage;
 using System.Reflection;
+using Mp3Storage.AudioDownloader;
 
 namespace Mp3StorageService.Models
 {
@@ -7,6 +9,7 @@ namespace Mp3StorageService.Models
     {
 
         private readonly string _pathToFile;
+        private readonly ILoggerManager _loggerManager;
 
         public LinkFileStorage()
         {
@@ -36,11 +39,14 @@ namespace Mp3StorageService.Models
 
         }
 
-        public string[] GetLinksNotExist(string[] links)
+        public string[] GetLinksNotExist(IEnumerable<CallDto> calls)
         {
 
             try
             {
+                calls = calls.Where(c => c.Links.Any());
+                IEnumerable<string> links = calls.SelectMany(c => c.Links);
+
                 var result = new List<string>();
                 var text = File.ReadAllText(_pathToFile);
 
@@ -51,6 +57,8 @@ namespace Mp3StorageService.Models
                         result.Add(link);
                     }
                 }
+
+                _loggerManager.Info($"{DateTimeOffset.Now}: Колличество не скачанных ссылок в звонках({links.Count()})");
                 return result.ToArray();
             }
             catch (Exception e)

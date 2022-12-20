@@ -69,6 +69,7 @@ namespace Mp3Storage.AudioDownloader
             try
             {
                 calls = await _coMagicApiClient.GetCalls(job.DateFrom, job.DateTo);
+                await DownloadCalls(calls, job.GroupBy, job.MaxRequestDownloadCount);
             }
             catch (Mp3StorageException e)
             {
@@ -76,11 +77,6 @@ namespace Mp3Storage.AudioDownloader
                 _loggerManager.Info($"{DateTimeOffset.Now}: Пробуем скачать с дроблениме, попыток({retryCount})");
 
                 await policy.ExecuteAsync(() => DownloadWithDivider(divider, job));
-            }
-
-            if (calls != null)
-            {
-                await DownloadCalls(calls, job.GroupBy, job.MaxRequestDownloadCount);
             }
         }
 
@@ -107,36 +103,13 @@ namespace Mp3Storage.AudioDownloader
 
         public async Task DownloadCalls(IEnumerable<CallDto> calls, string groupBy, int? maxRequestDownloadCount)
         {
-            //если папка для хранения отсутствует то создаем ее
+            if (calls == null)
+                return;
+
             if (!Directory.Exists(_pathToStorage))
                 Directory.CreateDirectory(_pathToStorage);
 
-            calls = calls.Where(c => c.Links.Any());
-
-            IEnumerable<string> links = calls.SelectMany(c => c.Links);
-            links = _linkStorage.GetLinksNotExist(links.ToArray());
-
-            _loggerManager.Info($"{DateTimeOffset.Now}: Колличество ссылок в звонках({links.Count()})");
-
-            var tasks = links.Select(l => DownloadAudio(l));
-
-            IEnumerable<ShortCallDto> shortCalls;
-
-            switch (groupBy)
-            {
-                case "Month":
-                    shortCalls = calls.SelectMany(c => c.Links.Select(l => new ShortCallDto
-                    { Link = l, FolderName = DateTime.Parse(c.Date).ToString("MM.yyyy") }));
-                    shortCalls = shortCalls.Where(c => links.Contains(c.Link));
-                    tasks = shortCalls.Select(c => DownloadAudio(c.Link, c.FolderName));
-                    break;
-                case "Day":
-                    shortCalls = calls.SelectMany(c => c.Links.Select(l => new ShortCallDto
-                    { Link = l, FolderName = DateTime.Parse(c.Date).ToString("dd.MM.yyyy") }));
-                    shortCalls = shortCalls.Where(c => links.Contains(c.Link));
-                    tasks = shortCalls.Select(c => DownloadAudio(c.Link, c.FolderName));
-                    break;
-            }
+            var tasks = GetTasksForDownload(calls, groupBy);
 
             if (maxRequestDownloadCount.HasValue)
             {
@@ -149,6 +122,49 @@ namespace Mp3Storage.AudioDownloader
             {
                 SemaphoreMaxRequestDownload = null;
             }
+        }
+
+        /// <summary>
+        /// Получение списка задач на скачивание
+        /// </summary>
+        /// <param name="calls"></param>
+        /// <param name="groupBy"></param>
+        /// <returns></returns>
+        private IEnumerable<Task> GetTasksForDownload(IEnumerable<CallDto> calls, string groupBy)
+        {
+            var links = _linkStorage.GetLinksNotExist(calls);
+
+            return groupBy switch
+            {
+                "Month" => GetTasksForDownloadByGroup(calls, links, "MM.yyyy"),
+                "Day" => GetTasksForDownloadByGroup(calls, links, "dd.MM.yyyy"),
+                _ => links.Select(l => DownloadAudio(l))
+            };
+        }
+
+        /// <summary>
+        /// Получение списка задач при скачивании с группировкой по папкам
+        /// </summary>
+        /// <param name="calls"></param>
+        /// <param name="links"></param>
+        /// <param name="folderMask"></param>
+        /// <returns></returns>
+        private IEnumerable<Task> GetTasksForDownloadByGroup(IEnumerable<CallDto> calls, string[] links, string folderMask)
+        {
+            var tasks = new List<Task>();
+
+            foreach (var call in calls)
+            {
+                var folderName = DateTime.Parse(call.Date).ToString(folderMask);
+                var callLinks = call.Links.Where(l => links.Contains(l));
+
+                foreach (var link in callLinks)
+                {
+                    tasks.Add(DownloadAudio(link, folderName));
+                }
+            }
+
+            return tasks;
         }
 
         public async Task DownloadAudio(string link, string folderName = null)

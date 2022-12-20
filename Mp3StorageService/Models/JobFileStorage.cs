@@ -110,25 +110,16 @@ namespace Mp3StorageService.Models
         /// <returns></returns>
         public async Task ExecuteFirstJob()
         {
-            try
-            {
-                _logger.Info($"Зашли в метод ExecuteFirstJob()");
-                if (!IsCanExecuteJob())
-                    return;
+            _logger.Info($"Зашли в метод ExecuteFirstJob()");
+            if (!IsCanExecuteJob())
+                return;
 
-                IsAlreadyExecuteJob = true;
+            IsAlreadyExecuteJob = true;
 
-                var job = Jobs.First(j => j.State != JobState.Success);
-                await ExecuteJob(job);
+            var job = Jobs.First(j => j.State != JobState.Success);
+            await ExecuteJob(job);
 
-                IsAlreadyExecuteJob = false;
-            }
-            catch (Exception e)
-            {
-                IsAlreadyExecuteJob = false;
-                _logger.Error($"Ошибка при выполнении работы", e);
-                ChangeState(job, JobState.Error);
-            }
+            IsAlreadyExecuteJob = false;
         }
 
         /// <summary>
@@ -138,23 +129,32 @@ namespace Mp3StorageService.Models
         /// <returns></returns>
         private async Task ExecuteJob(JobDownload job)
         {
-            ChangeState(job, JobState.Execute);
-
-            _logger.Info($"Работа job начала выполняться - {job.DateFrom} {job.DateTo}");
-            var childJobs = job.ChildJobs.Where(j => j.State != JobState.Success);
-
-            foreach (var childJob in childJobs)
+            try
             {
-                await ExecuteChildJob(childJob);
+                ChangeState(job, JobState.Execute);
+
+                _logger.Info($"Работа job начала выполняться - {job.DateFrom} {job.DateTo}");
+                var childJobs = job.ChildJobs.Where(j => j.State != JobState.Success);
+
+                foreach (var childJob in childJobs)
+                {
+                    await ExecuteChildJob(childJob);
+                }
+
+                if (job.ChildJobs.All(cj => cj.State == JobState.Success))
+                {
+                    ChangeState(job, JobState.Success);
+                }
+
+                if (job.ChildJobs.Any(cj => cj.State == JobState.Error))
+                {
+                    ChangeState(job, JobState.Error);
+                }
             }
-
-            if (job.ChildJobs.All(cj => cj.State == JobState.Success))
+            catch (Exception e)
             {
-                ChangeState(job, JobState.Success);
-            }
-
-            if (job.ChildJobs.Any(cj => cj.State == JobState.Error))
-            {
+                IsAlreadyExecuteJob = false;
+                _logger.Error($"Ошибка при выполнении работы", e);
                 ChangeState(job, JobState.Error);
             }
         }
