@@ -1,17 +1,10 @@
-﻿namespace Mp3Storage.AudioDownloader.Common
+﻿namespace Mp3Storage.AudioDownloader.Common;
+public class Mp3StorageException : Exception
 {
-    public class Mp3StorageException : Exception
-    {
-        public ExceptionCode Code { get; }
+    public ExceptionCode Code { get; }
 
-        public Mp3StorageException(string message, ExceptionCode code) : base(message)
-        {
-            Code = code;
-        }
-    }
-
-    public enum ExceptionCode
+    public Mp3StorageException(string message, ExceptionCode code) : base(message)
     {
-        ResponseOverflowCalls
+        Code = code;
     }
 }

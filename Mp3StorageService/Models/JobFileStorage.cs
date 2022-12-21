@@ -22,7 +22,7 @@ namespace Mp3StorageService.Models
 
             InitAudioDownloader(configuration);
 
-            FileUtility.CreateFileIfNotExist(_pathToFile, Jobs.ToJson());
+            File.WriteAllText(_pathToFile, Jobs.ToJson());
             InitJobs();
         }
 
