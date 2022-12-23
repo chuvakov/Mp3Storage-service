@@ -1,20 +1,19 @@
 ﻿using Mp3Storage.AudioDownloader;
 using Mp3Storage.AudioDownloader.Storage;
 using System.Reflection;
+using Mp3Storage.AudioDownloader.Utils;
 
 namespace Mp3StorageService.Models
 {
     public class SessionKeyFileStorage : ISessionKeyStorage
     {
         private readonly ILoggerManager _loggerManager;
-
         private readonly string _pathToFile;
 
         public SessionKeyFileStorage(ILoggerManager loggerManager)
         {
-            var appDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            _pathToFile = Path.Combine(appDir, "sessionKey.txt");
-            _loggerManager=loggerManager;
+            _pathToFile = FileUtility.GetPathTo("sessionKey.txt");
+            _loggerManager = loggerManager;
         }
 
         public string GetSessionKey()
@@ -24,10 +23,8 @@ namespace Mp3StorageService.Models
             string sessionKey = null;
             if (File.Exists(_pathToFile))
             {
-                using (var sr = new StreamReader(_pathToFile))
-                {
-                    sessionKey = sr.ReadLine();
-                }
+                using var sr = new StreamReader(_pathToFile);
+                sessionKey = sr.ReadLine();
             }
 
             return sessionKey;
@@ -37,10 +34,8 @@ namespace Mp3StorageService.Models
         {
             _loggerManager.Info($"{DateTimeOffset.Now}: Записываем новый ключ сессии в файл({nameof(SetSessionKey)})");
 
-            using (var sw = new StreamWriter(_pathToFile))
-            {
-                sw.WriteLine(sessionKey);
-            }
+            using var sw = new StreamWriter(_pathToFile);
+            sw.WriteLine(sessionKey);
         }
     }
 }

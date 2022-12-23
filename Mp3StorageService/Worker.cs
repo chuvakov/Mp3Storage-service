@@ -1,6 +1,4 @@
 using System.Globalization;
-using log4net;
-using Microsoft.Win32;
 using Mp3Storage.AudioDownloader;
 using Mp3Storage.AudioDownloader.Jobs;
 
@@ -9,29 +7,23 @@ namespace Mp3StorageService;
 public class Worker : BackgroundService
 {
     private readonly ILoggerManager _loggerManager;
-
-    private readonly IAudioDownloader _audioDownloader;
     private readonly IConfiguration _configuration;
     private readonly IJobStorage _jobStorage;
     private bool IsAutoDailyMode = false;
     private Timer _timer;
     private Timer _timerExecuter;
-    private readonly IHostApplicationLifetime _applicationLifetime;
 
-    public Worker(IAudioDownloader audioDownloader, IConfiguration configuration, ILoggerManager loggerManager, IJobStorage jobStorage, IHostApplicationLifetime applicationLifetime)
+    public Worker(IConfiguration configuration, ILoggerManager loggerManager, IJobStorage jobStorage)
     {
-        _audioDownloader = audioDownloader;
         _configuration = configuration;
         _loggerManager = loggerManager;
         _jobStorage = jobStorage;
-        _applicationLifetime = applicationLifetime;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _loggerManager.Info($"Служба запущена {DateTimeOffset.Now}");
-        var thread = new Thread(Start);
-        thread.Start();
+        new Thread(Start).Start();
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -51,7 +43,7 @@ public class Worker : BackgroundService
         try
         {
             //ToDo: Попытаться определять что ошибка произошла при получении данных из конфига
-            bool isDailyMode = bool.Parse(_configuration["App:IsDailyMode"]);
+            var isDailyMode = bool.Parse(_configuration["App:IsDailyMode"]);
             var dateTimeNow = DateTimeOffset.Now;
 
             if (!dateFrom.HasValue && !dateTo.HasValue)
@@ -64,7 +56,7 @@ public class Worker : BackgroundService
                 else
                 {
                     IsAutoDailyMode = true;
-                    dateFrom = DateTime.Parse(_configuration["App:DateFrom"]);
+                    dateFrom = DateTime.ParseExact(_configuration["App:DateFrom"], "dd.MM.yyyy", CultureInfo.CurrentCulture);
                     var dateToFromConfig = _configuration["App:DateTo"];
                     if (dateToFromConfig == "Today")
                     {
@@ -72,12 +64,10 @@ public class Worker : BackgroundService
                     }
                     else
                     {
-                        dateTo = DateTime.Parse(_configuration["App:DateTo"]);
+                        dateTo = DateTime.ParseExact(_configuration["App:DateTo"], "dd.MM.yyyy", CultureInfo.CurrentCulture);
                     }
                 }
             }
-
-
 
             var maxRequestDownloadCountSetting = _configuration["App:MaxRequestDownloadCount"];
             int? maxRequestDownloadCount = maxRequestDownloadCountSetting != "Max" ? int.Parse(maxRequestDownloadCountSetting) : null;
@@ -94,9 +84,6 @@ public class Worker : BackgroundService
         catch (Exception e)
         {
             _loggerManager.Error($"Произошла ошибка при добавлении работы ({nameof(DownloadMp3Files)}) - {DateTimeOffset.Now}", e);
-
-            await Task.Delay(3000); // 3600 * 1000 - один час, через который повторяем попытку
-            DownloadMp3Files(dateFrom, dateTo);
         }
     }
 }

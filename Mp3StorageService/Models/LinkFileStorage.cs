@@ -1,7 +1,7 @@
-﻿using Mp3Storage.AudioDownloader.Dto;
+﻿using Mp3Storage.AudioDownloader;
+using Mp3Storage.AudioDownloader.Dto;
 using Mp3Storage.AudioDownloader.Storage;
 using System.Reflection;
-using Mp3Storage.AudioDownloader;
 
 namespace Mp3StorageService.Models
 {
@@ -11,8 +11,9 @@ namespace Mp3StorageService.Models
         private readonly string _pathToFile;
         private readonly ILoggerManager _loggerManager;
 
-        public LinkFileStorage()
+        public LinkFileStorage(ILoggerManager loggerManager)
         {
+            _loggerManager = loggerManager;
             var appDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             _pathToFile = Path.Combine(appDir, "downloadedLinks.txt");
 
@@ -22,51 +23,48 @@ namespace Mp3StorageService.Models
                 file.Dispose();
             }
         }
+
+        /// <summary>
+        /// Добавление сылки в файл с сылками на файл
+        /// </summary>
+        /// <param name="link"></param>
         public void Add(string link)
         {
             try
             {
-                using (var sw = new StreamWriter(_pathToFile, true))
-                {
-                    sw.WriteLine(link);
-                }
+                using var sw = new StreamWriter(_pathToFile, true);
+                sw.WriteLine(link);
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _loggerManager.Error(e.Message, e);
                 throw;
             }
 
         }
 
+        /// <summary>
+        /// Получение ссылок на аудио, которые небыли скачены в предыдущей попытке
+        /// </summary>
+        /// <param name="calls"></param>
+        /// <returns></returns>
         public string[] GetLinksNotExist(IEnumerable<CallDto> calls)
         {
-
             try
             {
                 calls = calls.Where(c => c.Links.Any());
                 IEnumerable<string> links = calls.SelectMany(c => c.Links);
 
-                var result = new List<string>();
                 var text = File.ReadAllText(_pathToFile);
 
-                foreach (var link in links)
-                {
-                    if (!text.Contains(link))
-                    {
-                        result.Add(link);
-                    }
-                }
-
                 _loggerManager.Info($"{DateTimeOffset.Now}: Колличество не скачанных ссылок в звонках({links.Count()})");
-                return result.ToArray();
+                return links.Where(link => !text.Contains(link)).ToArray();
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _loggerManager.Error(e.Message, e);
                 throw;
             }
-
         }
     }
 }
