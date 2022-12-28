@@ -30,6 +30,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         services.AddTransient<IAudioDownloader, AudioDownloader>();
     })
     .UseConsoleLifetime()
+    .UseWindowsService()
     .Build();
 
 var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());

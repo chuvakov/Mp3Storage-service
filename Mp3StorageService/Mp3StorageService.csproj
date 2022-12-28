@@ -17,11 +17,17 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Content Include="install.bat">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
       <Content Include="install.ps1">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </Content>
       <Content Include="reinstall.ps1">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </Content>
+      <Content Include="Uninstal.bat">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
       <Content Include="uninstall.ps1">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
@@ -29,6 +35,8 @@
       <None Remove="Files\install.ps1" />
       <None Remove="Files\reinstall.ps1" />
       <None Remove="Files\uninstall.ps1" />
+      <None Remove="install.bat" />
+      <None Remove="Uninstal.bat" />
     </ItemGroup>
 
     <ItemGroup>

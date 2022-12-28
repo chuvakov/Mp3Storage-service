@@ -19,15 +19,13 @@ public class CoMagicApiClient : ICoMagicApiClient
     {
         _httpClient = httpClient;
         _sessionKeyStorage = sessionKeyStorage;
-
-        InitSessionKey();
     }
 
     /// <summary>
     /// Инициализация ключа сессии
     /// </summary>
     /// <param name="sessionKeyStorage"></param>
-    private void InitSessionKey(bool isUpdate = false)
+    public void InitSessionKey(bool isUpdate = false)
     {
         string sessionKey = _sessionKeyStorage.GetSessionKey();
 
@@ -63,7 +61,7 @@ public class CoMagicApiClient : ICoMagicApiClient
                 throw new Exception($"Не удалось получить данные о звонках за период: c {from} по {to}");
             }
 
-            if (response.Message == null || !response.Message.Contains("Unauthorized")) 
+            if (response.Message == null || !response.Message.Contains("Unauthorized"))
                 return response.Calls;
 
             if (isRetry)
@@ -77,7 +75,7 @@ public class CoMagicApiClient : ICoMagicApiClient
         }
         catch (Exception e)
         {
-            if (!e.Message.Contains("504")) 
+            if (!e.Message.Contains("504"))
                 throw;
 
             var isConnect = await CheckConnect();

@@ -23,4 +23,6 @@ public interface ICoMagicApiClient
     /// </summary>
     /// <returns>информации о звонках</returns>
     Task<IEnumerable<CallDto>> GetCalls(DateTime from, DateTime to, bool isRetry = false);
+
+    void InitSessionKey(bool isUpdate = false);
 }

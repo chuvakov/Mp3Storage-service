@@ -39,6 +39,7 @@ public class AudioDownloader : IAudioDownloader
     {
         _coMagicApiClient.Login = login;
         _coMagicApiClient.Password = password;
+        _coMagicApiClient.InitSessionKey();
 
         _pathToStorage = pathToStorage != "Base" ? pathToStorage : FileUtility.GetPathTo("mp3storage");
         if (!Directory.Exists(_pathToStorage))
